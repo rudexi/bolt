@@ -274,7 +274,7 @@ module Bolt
         raise Bolt::ValidationError, "Compilation is CPU-intensive, set concurrency less than #{compile_limit}"
       end
 
-      unless %w[human json].include? @format
+      unless %w[human json fancy].include? @format
         raise Bolt::ValidationError, "Unsupported format: '#{@format}'"
       end
 
