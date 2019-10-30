@@ -1,19 +1,9 @@
 require 'bolt/pal'
-
+require 'colored'
 
 module Bolt
   class Outputter
     class Fancy < Bolt::Outputter
-
-      COLORS = {
-        red: '31',
-        green: '32',
-        yellow: '33',
-        blue: '34',
-        magenta: '35',
-        cyan: '36',
-
-      }.freeze
 
       INDENT_SIZE = 2
 
@@ -34,27 +24,14 @@ module Bolt
 
       def indent(&block)
         @indent += 1
-        block.call
+        begin
+          block.call
+        rescue Exception => e
+          log e, :red
+          @indent -= 1
+          raise e
+        end
         @indent -= 1
-      end
-
-      def colorize(color, string, *options)
-        modifiers = []
-        options.each do |option|
-          modifiers << case option
-            when 'underlined' then '1'
-            when 'dim' then '2'
-            when 'bold' then '4'
-            when 'reverse' then '7'
-            else ''
-          end
-        end
-        modifiers.delete('')
-        if @color && color && @stream.isatty
-          "\033[#{COLORS[color]}#{modifiers.join(';')}m#{string}\033[0m"
-        else
-          string
-        end
       end
 
       def process_kind(log)
@@ -90,7 +67,12 @@ module Bolt
           options.delete(:title)
         end
 
-        @stream.puts(colorize(color, message, *options))
+        if color.nil?
+          @stream.puts(message)
+        else
+          @stream.puts(message.send(color))
+        end
+
       end
 
       def print_head()
@@ -253,17 +235,17 @@ module Bolt
       def color_object(obj)
         case obj
         when Hash
-          return '{' + obj.map{|k, v| colorize(:green, k) + colorize(:red, ': ')+ color_object(v) }.join(', ') + '}'
+          return '{' + obj.map{|k, v| k.green + ': '.red + color_object(v) }.join(', ') + '}'
         when Array
           return '[' + obj.map{|x| color_object(x)}.join(', ') + ']'
         when String
-          return '"' + colorize(:cyan, obj) + '"'
+          return '"' + obj.cyan + '"'
         when Numeric
-          return colorize(:cyan, obj)
+          return obj.to_s.cyan
         when NilClass
-          return colorize(:magenta, 'null')
-        when Boolean
-          return colorize(:blue, obj.to_s)
+          return 'null'.magenta
+        when TrueClass, FalseClass
+          return obj.to_s.blue
         else
           return obj
         end
@@ -272,22 +254,20 @@ module Bolt
       # Results
       def print_result(result)
         # Host
-        index = colorize(:cyan, "[#{@node_index}]")
+        index = "[#{@node_index}]".cyan
         time = (result['time'] || DateTime.now).strftime('%H:%M:%S')
         state = case
         when (report = result['report'] and report['status'] == 'unchanged')
-          colorize(:blue, '[UNCHANGED]')
+          '[UNCHANGED]'.blue
         when result.success?
-          colorize(:green, '[SUCCESS]')
+          '[SUCCESS]'.green
         else
-          colorize(:red, '[FAILURE]')
+          '[FAILURE]'.red
         end
         host = result.target.host
         log  [index, time, state, host].join(' ')
+        @node_index += 1
 
-        # Output
-        stderr = result.generic_value.fetch('stderr', '').strip
-        stdout = result.generic_value.fetch('stdout', '').strip
         # Puppet report
         if report = result['report']
           indent { print_puppet(report) }
@@ -295,8 +275,6 @@ module Bolt
           indent { print_error(error) }
         elsif result.generic_value
           indent { log color_object(result.generic_value) }
-        elsif !stderr.empty? and !stdout.empty?
-          indent { log stderr, :yellow ; log stdout }
         # Non structured output
         elsif @output and output = result.value['_output']
           indent { log output }
@@ -306,34 +284,34 @@ module Bolt
           indent { log result.class, :magenta ; log result, :magenta }
         end
 
-        @node_index += 1
       end
 
       def print_error(error)
         case error
         when Bolt::Error
           value = error
-          log "[#{colorize(:red, value.kind)}] #{value.msg}"
+          log "[#{value.kind}] ".red + "#{value.msg}"
         when Hash
           if %w[kind issue_code msg details].map{|k| error.keys.include? k}.all?
-            log "#{colorize(:red, "[#{error['kind']}]")}[#{error['issue_code']}] #{error['msg']}"
+            log "[#{error['kind']}]".red + "[#{error['issue_code']}] ".red + error['msg']
           else
-            log error.to_json, :red
+            log error.to_json.red
           end
         else
-          log error.to_s, :red
+          log error.to_s.red
         end
       end
 
       def print_puppetfile_result(success, puppetfile, moduledir)
         if success
-          log "Successfully synced modules from #{puppetfile} to #{moduledir}", :green
+          log "Successfully synced modules from #{puppetfile.to_s} to #{moduledir}", :green
         else
-          log "Failed to sync modules from #{puppetfile} to #{moduledir}", :red
+          log "Failed to sync modules from #{puppetfile.to_s} to #{moduledir}", :red
         end
       end
 
       def fatal_error(err)
+        log '[fatal_error]', :magenta
         log err.message, :red
         if err.is_a? Bolt::RunFailure
           log ::JSON.pretty_generate(err.result_set)
