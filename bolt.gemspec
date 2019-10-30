@@ -50,6 +50,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "r10k", "~> 3.1"
   spec.add_dependency "ruby_smb", "~> 1.0"
   spec.add_dependency "terminal-table", "~> 1.8"
+  spec.add_dependency "ruby-terminfo", "~> 0.1"
   spec.add_dependency "winrm", "~> 2.0"
   spec.add_dependency "winrm-fs", "~> 1.3"
 
